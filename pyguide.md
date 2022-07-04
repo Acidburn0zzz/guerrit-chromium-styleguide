@@ -212,11 +212,7 @@ that the arguments are actually unused.
 ### 2.2 Imports 
 
 Use `import` statements for packages and modules only, not for individual
-classes or functions. Imports from the [typing module](#typing-imports),
-[typing_extensions module](https://github.com/python/typing/tree/master/typing_extensions),
-and the
-[six.moves module](https://six.readthedocs.io/#module-six.moves)
-are exempt from this rule.
+classes or functions.
 
 <a id="s2.2.1-definition"></a>
 <a id="221-definition"></a>
@@ -253,8 +249,9 @@ Module names can still collide. Some module names are inconveniently long.
 *   Use `import x` for importing packages and modules.
 *   Use `from x import y` where `x` is the package prefix and `y` is the module
     name with no prefix.
-*   Use `from x import y as z` if two modules named `y` are to be imported or if
-    `y` is an inconveniently long name.
+*   Use `from x import y as z` if two modules named `y` are to be imported, if
+    `y` conflicts with a top-level name defined in the current module, or if `y`
+    is an inconveniently long name.
 *   Use `import y as z` only when `z` is a standard abbreviation (e.g., `np` for
     `numpy`).
 
@@ -269,6 +266,19 @@ echo.EchoFilter(input, output, delay=0.7, atten=4)
 Do not use relative names in imports. Even if the module is in the same package,
 use the full package name. This helps prevent unintentionally importing a
 package twice.
+
+<a id="imports-exemptions"></a>
+##### 2.2.4.1 Exemptions 
+
+Exemptions from this rule:
+
+*   Symbols from the following modules and used to support static analysis and
+    type checking:
+    *   [`typing` module](#typing-imports)
+    *   [`collections.abc` module](#typing-imports)
+    *   [`typing_extensions` module](https://github.com/python/typing_extensions/blob/main/README.md)
+*   Redirects from the
+    [six.moves module](https://six.readthedocs.io/#module-six.moves).
 
 <a id="s2.3-packages"></a>
 <a id="23-packages"></a>
@@ -306,31 +316,32 @@ All new code should import each module by its full package name.
 
 Imports should be as follows:
 
+```python
 Yes:
+  # Reference absl.flags in code with the complete name (verbose).
+  import absl.flags
+  from doctor.who import jodie
 
-```python
-# Reference absl.flags in code with the complete name (verbose).
-import absl.flags
-from doctor.who import jodie
-
-FLAGS = absl.flags.FLAGS
+  _FOO = absl.flags.DEFINE_string(...)
 ```
 
 ```python
-# Reference flags in code with just the module name (common).
-from absl import flags
-from doctor.who import jodie
+Yes:
+  # Reference flags in code with just the module name (common).
+  from absl import flags
+  from doctor.who import jodie
 
-FLAGS = flags.FLAGS
+  _FOO = flags.DEFINE_string(...)
 ```
 
-No: _(assume this file lives in `doctor/who/` where `jodie.py` also exists)_
+*(assume this file lives in `doctor/who/` where `jodie.py` also exists)*
 
 ```python
-# Unclear what module the author wanted and what will be imported.  The actual
-# import behavior depends on external factors controlling sys.path.
-# Which possible jodie module did the author intend to import?
-import jodie
+No:
+  # Unclear what module the author wanted and what will be imported.  The actual
+  # import behavior depends on external factors controlling sys.path.
+  # Which possible jodie module did the author intend to import?
+  import jodie
 ```
 
 The directory the main binary is located in should not be assumed to be in
@@ -414,7 +425,7 @@ Exceptions must follow certain conditions:
           # guarantee this specific behavioral reaction to API misuse.
           raise ValueError(f'Min. port must be at least 1024, not {minimum}.')
         port = self._find_next_open_port(minimum)
-        if not port:
+        if port is None:
           raise ConnectionError(
               f'Could not connect to service on port {minimum} or higher.')
         assert port >= minimum, (
@@ -439,9 +450,10 @@ Exceptions must follow certain conditions:
         return port
     ```
 
+
 -   Libraries or packages may define their own exceptions. When doing so they
     must inherit from an existing exception class. Exception names should end in
-    `Error` and should not introduce stutter (`foo.FooError`).
+    `Error` and should not introduce repetition (`foo.FooError`).
 
 -   Never use catch-all `except:` statements, or catch `Exception` or
     `StandardError`, unless you are
@@ -506,13 +518,14 @@ assignments to global variables are done when the module is first imported.
 
 Avoid global variables.
 
-While they are technically variables, module-level constants are permitted and
-encouraged. For example: `_MAX_HOLY_HANDGRENADE_COUNT = 3`. Constants must be
-named using all caps with underscores. See [Naming](#s3.16-naming) below.
+If needed, global variables should be declared at the module level and made
+internal to the module by prepending an `_` to the name. External access to
+global variables must be done through public module-level functions. See
+[Naming](#s3.16-naming) below.
 
-If needed, globals should be declared at the module level and made internal to
-the module by prepending an `_` to the name. External access must be done
-through public module-level functions. See [Naming](#s3.16-naming) below.
+While module-level constants are technically variables, they are permitted and
+encouraged. For example: `MAX_HOLY_HANDGRENADE_COUNT = 3`. Constants must be
+named using all caps with underscores. See [Naming](#s3.16-naming) below.
 
 <a id="s2.6-nested"></a>
 <a id="26-nested"></a>
@@ -717,14 +730,12 @@ Yes:  for key in adict: ...
       if obj in alist: ...
       for line in afile: ...
       for k, v in adict.items(): ...
-      for k, v in six.iteritems(adict): ...
 ```
 
 ```python
 No:   for key in adict.keys(): ...
       if not adict.has_key(key): ...
       for line in afile.readlines(): ...
-      for k, v in dict.iteritems(): ...
 ```
 
 <a id="s2.9-generators"></a>
@@ -739,7 +750,7 @@ Use generators as needed.
 <a id="291-definition"></a>
 
 <a id="generators-definition"></a>
-#### 2.9 Definition 
+#### 2.9.1 Definition 
 
 A generator function returns an iterator that yields a value each time it
 executes a yield statement. After it yields a value, the runtime state of the
@@ -761,7 +772,8 @@ creates an entire list of values at once.
 <a id="generators-cons"></a>
 #### 2.9.3 Cons 
 
-None.
+Local variables in the generator will not be garbage collected until the
+generator is either consumed to exhaustion or itself garbage collected.
 
 <a id="s2.9.4-decision"></a>
 <a id="294-decision"></a>
@@ -771,6 +783,11 @@ None.
 
 Fine. Use "Yields:" rather than "Returns:" in the docstring for generator
 functions.
+
+If the generator manages an expensive resource, make sure to force the clean up.
+
+A good way to do the clean up is by wrapping the generator with a context
+manager [PEP-0533](https://peps.python.org/pep-0533/).
 
 <a id="s2.10-lambda-functions"></a>
 <a id="210-lambda-functions"></a>
@@ -952,11 +969,14 @@ Yes: def foo(a, b: Sequence = ()):  # Empty tuple OK since tuples are immutable
 ```
 
 ```python
+from absl import flags
+_FOO = flags.DEFINE_string(...)
+
 No:  def foo(a, b=[]):
          ...
 No:  def foo(a, b=time.time()):  # The time the module was loaded???
          ...
-No:  def foo(a, b=FLAGS.my_thing):  # sys.argv has not yet been parsed...
+No:  def foo(a, b=_FOO.value):  # sys.argv has not yet been parsed...
          ...
 No:  def foo(a, b: Mapping = {}):  # Could still get passed to unchecked code
          ...
@@ -968,8 +988,10 @@ No:  def foo(a, b: Mapping = {}):  # Could still get passed to unchecked code
 <a id="properties"></a>
 ### 2.13 Properties 
 
-Use properties for accessing or setting data where you would normally have used
-simple, lightweight accessor or setter methods.
+Properties may be used to control getting or setting attributes that require
+trivial computations or logic. Property implementations must match the general
+expectations of regular attribute access: that they are cheap, straightforward,
+and unsurprising.
 
 <a id="s2.13.1-definition"></a>
 <a id="2131-definition"></a>
@@ -978,7 +1000,7 @@ simple, lightweight accessor or setter methods.
 #### 2.13.1 Definition 
 
 A way to wrap method calls for getting and setting an attribute as a standard
-attribute access when the computation is lightweight.
+attribute access.
 
 <a id="s2.13.2-pros"></a>
 <a id="2132-pros"></a>
@@ -986,12 +1008,12 @@ attribute access when the computation is lightweight.
 <a id="properties-pros"></a>
 #### 2.13.2 Pros 
 
-Readability is increased by eliminating explicit get and set method calls for
-simple attribute access. Allows calculations to be lazy. Considered the Pythonic
-way to maintain the interface of a class. In terms of performance, allowing
-properties bypasses needing trivial accessor methods when a direct variable
-access is reasonable. This also allows accessor methods to be added in the
-future without breaking the interface.
+*   Allows for an attribute access and assignment API rather than
+    [getter and setter](#getters-and-setters) method calls.
+*   Can be used to make an attribute read-only.
+*   Allows calculations to be lazy.
+*   Provides a way to maintain the public interface of a class when the
+    internals evolve independently of class users.
 
 <a id="s2.13.3-cons"></a>
 <a id="2133-cons"></a>
@@ -999,8 +1021,8 @@ future without breaking the interface.
 <a id="properties-cons"></a>
 #### 2.13.3 Cons 
 
-Can hide side-effects much like operator overloading. Can be confusing for
-subclasses.
+*   Can hide side-effects much like operator overloading.
+*   Can be confusing for subclasses.
 
 <a id="s2.13.4-decision"></a>
 <a id="2134-decision"></a>
@@ -1008,58 +1030,22 @@ subclasses.
 <a id="properties-decision"></a>
 #### 2.13.4 Decision 
 
-Use properties in new code to access or set data where you would normally have
-used lightweight accessor or setter methods. Properties should be created with
-the `@property` [decorator](#s2.17-function-and-method-decorators).
+Properties are allowed, but, like operator overloading, should only be used when
+necessary and match the expectations of typical attribute access; follow the
+[getters and setters](#getters-and-setters) rules otherwise.
 
-Inheritance with properties can be non-obvious if the property itself is not
-overridden. Thus one must make sure that accessor methods are called indirectly
-to ensure methods overridden in subclasses are called by the property (using the
-[template method design pattern](https://en.wikipedia.org/wiki/Template_method_pattern)).
+For example, using a property to simply both get and set an internal attribute
+isn't allowed: there is no computation occurring, so the property is unnecessary
+([make the attribute public instead](#getters-and-setters)). In comparison,
+using a property to control attribute access or to calculate a *trivially*
+derived value is allowed: the logic is simple and unsurprising.
 
-```python
-Yes: import math
+Properties should be created with the `@property`
+[decorator](#s2.17-function-and-method-decorators). Manually implementing a
+property descriptor is considered a [power feature](#power-features).
 
-     class Square:
-         """A square with two properties: a writable area and a read-only perimeter.
-
-         To use:
-         >>> sq = Square(3)
-         >>> sq.area
-         9
-         >>> sq.perimeter
-         12
-         >>> sq.area = 16
-         >>> sq.side
-         4
-         >>> sq.perimeter
-         16
-         """
-
-         def __init__(self, side: float):
-             self.side = side
-
-         @property
-         def area(self) -> float:
-             """Area of the square."""
-             return self._get_area()
-
-         @area.setter
-         def area(self, area: float):
-             self._set_area(area)
-
-         def _get_area(self) -> float:
-             """Indirect accessor to calculate the 'area' property."""
-             return self.side ** 2
-
-         def _set_area(self, area: float):
-             """Indirect setter to set the 'area' property."""
-             self.side = math.sqrt(area)
-
-         @property
-         def perimeter(self) -> float:
-             return self.side * 4
-```
+Inheritance with properties can be non-obvious. Do not use properties to
+implement computations a subclass may ever want to override and extend.
 
 <a id="s2.14-truefalse-evaluations"></a>
 <a id="214-truefalse-evaluations"></a>
@@ -1127,9 +1113,6 @@ Use the "implicit" false if possible, e.g., `if foo:` rather than `if foo !=
     Yes: if not users:
              print('no users')
 
-         if foo == 0:
-             self.handle_zero()
-
          if i % 10 == 0:
              self.handle_multiple_of_ten()
 
@@ -1142,9 +1125,6 @@ Use the "implicit" false if possible, e.g., `if foo:` rather than `if foo !=
     No:  if len(users) == 0:
              print('no users')
 
-         if foo is not None and not foo:
-             self.handle_zero()
-
          if not i % 10:
              self.handle_multiple_of_ten()
 
@@ -1153,6 +1133,10 @@ Use the "implicit" false if possible, e.g., `if foo:` rather than `if foo !=
     ```
 
 -   Note that `'0'` (i.e., `0` as string) evaluates to true.
+
+-   Note that Numpy arrays may raise an exception in an implicit boolean
+    context. Prefer the `.size` attribute when testing emptiness of a `np.array`
+    (e.g. `if not users.size`).
 
 <a id="s2.16-lexical-scoping"></a>
 <a id="216-lexical-scoping"></a>
@@ -1283,8 +1267,9 @@ eliminate some repetitive code, enforce invariants, etc.
 
 Decorators can perform arbitrary operations on a function's arguments or return
 values, resulting in surprising implicit behavior. Additionally, decorators
-execute at import time. Failures in decorator code are pretty much impossible to
-recover from.
+execute at object definition time. For module-level objects (classes, module
+functions, ...) this happens at import time. Failures in decorator code are
+pretty much impossible to recover from.
 
 <a id="s2.17.4-decision"></a>
 <a id="2174-decision"></a>
@@ -1442,14 +1427,6 @@ In code that may execute on versions as old as 3.5 rather than >= 3.7, import:
 from __future__ import generator_stop
 ```
 
-For legacy code with the burden of continuing to support 2.7, import:
-
-```python
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-```
-
 For more information read the
 [Python future statement definitions](https://docs.python.org/3/library/__future__.html)
 documentation.
@@ -1460,19 +1437,7 @@ feature a specific future import enables in your code today, keeping it in place
 in the file prevents later modifications of the code from inadvertently
 depending on the older behavior.
 
-Use other `from __future__` import statements as you see fit. We did not include
-`unicode_literals` in our recommendations for 2.7 as it was not a clear win due
-to implicit default codec conversion consequences it introduced in many places
-within 2.7. Most dual-version 2-and-3 code was better off with explicit use of
-`b''` and `u''` bytes and unicode string literals where necessary.
-
-##### The six, future, and past libraries
-
-When your project still needs to support use under both Python 2 and 3, use the
-[six](https://pypi.org/project/six/),
-[future](https://pypi.org/project/future/), and
-[past](https://pypi.org/project/past/) libraries as you see fit. They exist to
-make your code cleaner and life easier.
+Use other `from __future__` import statements as you see fit.
 
 <a id="s2.21-type-annotated-code"></a>
 <a id="s2.21-typed-code"></a>
@@ -1482,10 +1447,9 @@ make your code cleaner and life easier.
 <a id="typed-code"></a>
 ### 2.21 Type Annotated Code 
 
-You can annotate Python 3 code with type hints according to
+You can annotate Python code with type hints according to
 [PEP-484](https://www.python.org/dev/peps/pep-0484/), and type-check the code at
 build time with a type checking tool like [pytype](https://github.com/google/pytype).
-
 
 Type annotations can be in the source or in a
 [stub pyi file](https://www.python.org/dev/peps/pep-0484/#stub-files). Whenever
@@ -1503,7 +1467,7 @@ Type annotations (or "type hints") are for function or method arguments and
 return values:
 
 ```python
-def func(a: int) -> List[int]:
+def func(a: int) -> list[int]:
 ```
 
 You can also declare the type of a variable using similar
@@ -1511,12 +1475,6 @@ You can also declare the type of a variable using similar
 
 ```python
 a: SomeType = some_func()
-```
-
-Or by using a type comment in code that must support legacy Python versions.
-
-```python
-a = some_func()  # type: SomeType
 ```
 
 <a id="s2.21.2-pros"></a>
@@ -1805,6 +1763,10 @@ definitions. One blank line between method definitions and between the `class`
 line and the first method. No blank line following a `def` line. Use single
 blank lines as you judge appropriate within functions or methods.
 
+Blank lines need not be anchored to the definition. For example, related
+comments immediately preceding function, class, and method definitions can make
+sense. Consider if your comment might be more useful as part of the docstring.
+
 <a id="s3.6-whitespace"></a>
 <a id="36-whitespace"></a>
 
@@ -1874,7 +1836,7 @@ No:  x<1
 
 Never use spaces around `=` when passing keyword arguments or defining a default
 parameter value, with one exception:
-[when a type annotation is present](#typing-default-values), _do_ use spaces
+[when a type annotation is present](#typing-default-values), *do* use spaces
 around the `=` for the default parameter value.
 
 ```python
@@ -1944,7 +1906,7 @@ inline comments.
 <a id="docstrings"></a>
 #### 3.8.1 Docstrings 
 
-Python uses _docstrings_ to document code. A docstring is a string that is the
+Python uses *docstrings* to document code. A docstring is a string that is the
 first statement in a package, module, class or function. These strings can be
 extracted automatically through the `__doc__` member of the object and are used
 by `pydoc`.
@@ -2050,7 +2012,14 @@ aptly described using a one-line docstring.
     returns None, this section is not required. It may also be omitted if the
     docstring starts with Returns or Yields (e.g. `"""Returns row from Bigtable
     as a tuple of strings."""`) and the opening sentence is sufficient to
-    describe return value.
+    describe the return value. Do not imitate 'NumPy style'
+    ([example](http://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html)),
+    which frequently documents a tuple return value as if it were multiple
+    return values with individual names (never mentioning the tuple). Instead,
+    describe such a return value as: "Returns: A tuple (mat_a, mat_b), where
+    mat_a is ..., and ...". The auxiliary names in the docstring need not
+    necessarily correspond to any internal names used in the function body (as
+    those are not part of the API).
 
 <a id="doc-function-raises"></a>
 [*Raises:*](#doc-function-raises)
@@ -2065,7 +2034,7 @@ aptly described using a one-line docstring.
 def fetch_smalltable_rows(table_handle: smalltable.Table,
                           keys: Sequence[Union[bytes, str]],
                           require_all_keys: bool = False,
-) -> Mapping[bytes, Tuple[str]]:
+) -> Mapping[bytes, tuple[str, ...]]:
     """Fetches rows from a Smalltable.
 
     Retrieves rows pertaining to the given keys from the Table instance
@@ -2075,8 +2044,8 @@ def fetch_smalltable_rows(table_handle: smalltable.Table,
         table_handle: An open smalltable.Table instance.
         keys: A sequence of strings representing the key of each table
           row to fetch.  String keys will be UTF-8 encoded.
-        require_all_keys: Optional; If require_all_keys is True only
-          rows with values set for all keys will be returned.
+        require_all_keys: If True only rows with values set for all keys will be
+          returned.
 
     Returns:
         A dict mapping keys to the corresponding table row data
@@ -2102,7 +2071,7 @@ Similarly, this variation on `Args:` with a line break is also allowed:
 def fetch_smalltable_rows(table_handle: smalltable.Table,
                           keys: Sequence[Union[bytes, str]],
                           require_all_keys: bool = False,
-) -> Mapping[bytes, Tuple[str]]:
+) -> Mapping[bytes, tuple[str, ...]]:
     """Fetches rows from a Smalltable.
 
     Retrieves rows pertaining to the given keys from the Table instance
@@ -2115,8 +2084,7 @@ def fetch_smalltable_rows(table_handle: smalltable.Table,
         A sequence of strings representing the key of each table row to
         fetch.  String keys will be UTF-8 encoded.
       require_all_keys:
-        Optional; If require_all_keys is True only rows with values set
-        for all keys will be returned.
+        If True only rows with values set for all keys will be returned.
 
     Returns:
       A dict mapping keys to the corresponding table row data
@@ -2152,8 +2120,8 @@ If your class has public attributes, they should be documented here in an
 class SampleClass:
     """Summary of class here.
 
-    Longer class information....
-    Longer class information....
+    Longer class information...
+    Longer class information...
 
     Attributes:
         likes_spam: A boolean indicating if we like SPAM or not.
@@ -2167,6 +2135,34 @@ class SampleClass:
 
     def public_method(self):
         """Performs operation blah."""
+```
+
+All class docstrings should start with a one-line summary that describes what
+the class instance represents. This implies that subclasses of `Exception`
+should also describe what the exception represents, and not the context in which
+it might occur. The class docstring should not repeat unnecessary information,
+such as that the class is a class.
+
+```python
+class CheeseShopAddress:
+  """The address of a cheese shop.
+
+  ...
+  """
+
+class OutOfCheeseError(Exception):
+  """No more cheese is available."""
+```
+
+```python
+class CheeseShopAddress:
+  """Class that describes the address of a cheese shop.
+
+  ...
+  """
+
+class OutOfCheeseError(Exception):
+  """Raised when no more cheese is available."""
 ```
 
 <a id="s3.8.5-block-and-inline-comments"></a>
@@ -2237,23 +2233,20 @@ punctuation, spelling, and grammar help with that goal.
 Use an
 [f-string](https://docs.python.org/3/reference/lexical_analysis.html#f-strings),
 the `%` operator, or the `format` method for formatting strings, even when the
-parameters are all strings. Use your best judgment to decide between `+` and `%`
-(or `format`) though. Do not use `%` or the `format` method for pure
-concatenation.
+parameters are all strings. Use your best judgment to decide between `+` and
+string formatting.
 
 ```python
-Yes: x = a + b
+Yes: x = f'name: {name}; score: {n}'
      x = '%s, %s!' % (imperative, expletive)
      x = '{}, {}'.format(first, second)
      x = 'name: %s; score: %d' % (name, n)
      x = 'name: {}; score: {}'.format(name, n)
-     x = f'name: {name}; score: {n}'
+     x = a + b
 ```
 
 ```python
-No: x = '%s%s' % (a, b)  # use + in this case
-    x = '{}{}'.format(a, b)  # use + in this case
-    x = first + ', ' + second
+No: x = first + ', ' + second
     x = 'name: ' + name + '; score: ' + str(n)
 ```
 
@@ -2283,7 +2276,7 @@ No: employee_table = '<table>'
 
 Be consistent with your choice of string quote character within a file. Pick `'`
 or `"` and stick with it. It is okay to use the other quote character on a
-string to avoid the need to `\\ ` escape within the string.
+string to avoid the need to backslash-escape quote characters within the string.
 
 ```python
 Yes:
@@ -2546,14 +2539,15 @@ event ("Remove this code when all clients can handle XML responses.").
 ### 3.13 Imports formatting 
 
 Imports should be on separate lines; there are
-[exceptions for `typing` imports](#typing-imports).
+[exceptions for `typing` and `collections.abc` imports](#typing-imports).
 
 E.g.:
 
 ```python
-Yes: import os
+Yes: from collections.abc import Mapping, Sequence
+     import os
      import sys
-     from typing import Mapping, Sequence
+     from typing import Any, NewType
 ```
 
 ```python
@@ -2568,9 +2562,7 @@ grouped from most generic to least generic:
 1.  Python future import statements. For example:
 
     ```python
-    from __future__ import absolute_import
-    from __future__ import division
-    from __future__ import print_function
+    from __future__ import annotations
     ```
 
     See [above](#from-future-imports) for more information about those.
@@ -2678,22 +2670,33 @@ No:
 <a id="s3.15-access-control"></a>
 <a id="315-access-control"></a>
 <a id="access-control"></a>
-
 <a id="accessors"></a>
-### 3.15 Accessors 
 
-If an accessor function would be trivial, you should use public variables
-instead of accessor functions to avoid the extra cost of function calls in
-Python. When more functionality is added you can use `property` to keep the
-syntax consistent.
+<a id="getters-and-setters"></a>
+### 3.15 Getters and Setters 
 
-On the other hand, if access is more complex, or the cost of accessing the
-variable is significant, you should use function calls (following the
-[Naming](#s3.16-naming) guidelines) such as `get_foo()` and `set_foo()`. If the
-past behavior allowed access through a property, do not bind the new accessor
-functions to the property. Any code still attempting to access the variable by
-the old method should break visibly so they are made aware of the change in
-complexity.
+Getter and setter functions (also called accessors and mutators) should be used
+when they provide a meaningful role or behavior for getting or setting a
+variable's value.
+
+In particular, they should be used when getting or setting the variable is
+complex or the cost is significant, either currently or in a reasonable future.
+
+If, for example, a pair of getters/setters simply read and write an internal
+attribute, the internal attribute should be made public instead. By comparison,
+if setting a variable means some state is invalidated or rebuilt, it should be a
+setter function. The function invocation hints that a potentially non-trivial
+operation is occurring. Alternatively, [properties](#properties) may be an
+option when simple logic is needed, or refactoring to no longer need getters and
+setters.
+
+Getters and setters should follow the [Naming](#s3.16-naming) guidelines, such
+as `get_foo()` and `set_foo()`.
+
+If the past behavior allowed access through a property, do not bind the new
+getter/setter functions to the property. Any code still attempting to access the
+variable by the old method should break visibly so they are made aware of the
+change in complexity.
 
 <a id="s3.16-naming"></a>
 <a id="316-naming"></a>
@@ -2703,7 +2706,8 @@ complexity.
 
 `module_name`, `package_name`, `ClassName`, `method_name`, `ExceptionName`,
 `function_name`, `GLOBAL_CONSTANT_NAME`, `global_var_name`, `instance_var_name`,
-`function_parameter_name`, `local_var_name`.
+`function_parameter_name`, `local_var_name`, `query_proper_noun_for_thing`,
+`send_acronym_via_https`.
 
 
 Function names, variable names, and filenames should be descriptive; eschew
@@ -2724,6 +2728,8 @@ Always use a `.py` filename extension. Never use dashes.
     -   counters or iterators (e.g. `i`, `j`, `k`, `v`, et al.)
     -   `e` as an exception identifier in `try/except` statements.
     -   `f` as a file handle in `with` statements
+    -   private [`TypeVar`s](#typing-type-var) with no constraints (e.g. `_T`,
+        `_U`, `_V`)
 
     Please be mindful not to abuse single-character naming. Generally speaking,
     descriptiveness should be proportional to the name's scope of visibility.
@@ -2957,11 +2963,23 @@ the function into smaller and more manageable pieces.
 
 *   Familiarize yourself with
     [PEP-484](https://www.python.org/dev/peps/pep-0484/).
+
 *   In methods, only annotate `self`, or `cls` if it is necessary for proper
-    type information. e.g., `@classmethod def create(cls: Type[T]) -> T: return
-    cls()`
+    type information. e.g.,
+
+    ```python
+    @classmethod
+    def create(cls: Type[T]) -> T:
+      return cls()
+    ```
+
+*   Similarly, don't feel compelled to annotate the return value of `__init__`
+    (where `None` is the only valid option).
+
 *   If any other variable or a returned type should not be expressed, use `Any`.
+
 *   You are not required to annotate all the functions in a module.
+
     -   At least annotate your public APIs.
     -   Use judgment to get to a good balance between safety and clarity on the
         one hand, and flexibility on the other.
@@ -3004,7 +3022,7 @@ is too long, indent by 4 in a new line.
 
 ```python
 def my_method(
-    self, first_var: int) -> Tuple[MyLongType1, MyLongType1]:
+    self, first_var: int) -> tuple[MyLongType1, MyLongType1]:
   ...
 ```
 
@@ -3016,7 +3034,7 @@ closing parenthesis with the `def`.
 Yes:
 def my_method(
     self, other_arg: Optional[MyLongType]
-) -> Dict[OtherLongType, MyLongType]:
+) -> dict[OtherLongType, MyLongType]:
   ...
 ```
 
@@ -3028,7 +3046,7 @@ opening one, but this is less readable.
 No:
 def my_method(self,
               other_arg: Optional[MyLongType]
-             ) -> Dict[OtherLongType, MyLongType]:
+             ) -> dict[OtherLongType, MyLongType]:
   ...
 ```
 
@@ -3038,9 +3056,9 @@ too long to be on a single line (try to keep sub-types unbroken).
 ```python
 def my_method(
     self,
-    first_var: Tuple[List[MyLongType1],
-                     List[MyLongType2]],
-    second_var: List[Dict[
+    first_var: tuple[list[MyLongType1],
+                     list[MyLongType2]],
+    second_var: list[dict[
         MyLongType3, MyLongType4]]) -> None:
   ...
 ```
@@ -3075,13 +3093,15 @@ def my_function(
 
 If you need to use a class name from the same module that is not yet defined --
 for example, if you need the class inside the class declaration, or if you use a
-class that is defined below -- use a string for the class name.
+class that is defined below -- either use `from __future__ import annotations`
+for simple cases or use a string for the class name.
 
 ```python
+from __future__ import annotations
+
 class MyClass:
 
-  def __init__(self,
-               stack: List["MyClass"]) -> None:
+  def __init__(self, stack: Sequence[MyClass]) -> None:
 ```
 
 <a id="s3.19.4-default-values"></a>
@@ -3092,7 +3112,7 @@ class MyClass:
 
 As per
 [PEP-008](https://www.python.org/dev/peps/pep-0008/#other-recommendations), use
-spaces around the `=` _only_ for arguments that have both a type annotation and
+spaces around the `=` *only* for arguments that have both a type annotation and
 a default value.
 
 ```python
@@ -3153,9 +3173,11 @@ CapWorded. If the alias is used only in this module, it should be \_Private.
 For example, if the name of the module together with the name of the type is too
 long:
 
+<!-- Annotate below with `typing.TypeAlias` for 3.10. -->
+
 ```python
 _ShortName = module_with_long_name.TypeWithLongName
-ComplexMap = Mapping[str, List[Tuple[int, int]]]
+ComplexMap = Mapping[str, list[tuple[int, int]]]
 ```
 
 Other examples are complex nested types and multiple return variables from a
@@ -3184,25 +3206,26 @@ ignore`.
 <a id="typing-variables"></a>
 #### 3.19.8 Typing Variables 
 
-If an internal variable has a type that is hard or impossible to infer, you can
-specify its type in a couple ways.
-
-<a id="type-comments"></a>
-[*Type Comments:*](#type-comments)
-:   Use a `# type:` comment on the end of the line
-
-```python
-a = SomeUndecoratedFunction()  # type: Foo
-```
-
 <a id="annotated-assignments"></a>
 [*Annotated Assignments*](#annotated-assignments)
-:   Use a colon and type between the variable name and value, as with function
-    arguments.
+:   If an internal variable has a type that is hard or impossible to infer,
+    specify its type with an annotated assignment - use a colon and type between
+    the variable name and value (the same as is done with function arguments
+    that have a default value):
 
-```python
-a: Foo = SomeUndecoratedFunction()
-```
+    ```python
+    a: Foo = SomeUndecoratedFunction()
+    ```
+
+<a id="type-comments"></a>
+[*Type Comments*](#type-comments)
+:   Though you may see them remaining in the codebase (they were necessary
+    before Python 3.6), do not add any more uses of a `# type: <type name>`
+    comment on the end of the line:
+
+    ```python
+    a = SomeUndecoratedFunction()  # type: Foo
+    ```
 
 <a id="s3.19.9-tuples-vs-lists"></a>
 <a id="s3.19.9-tuples"></a>
@@ -3216,9 +3239,9 @@ have a single repeated type or a set number of elements with different types.
 The latter is commonly used as the return type from a function.
 
 ```python
-a = [1, 2, 3]  # type: List[int]
-b = (1, 2, 3)  # type: Tuple[int, ...]
-c = (1, "2", 3.5)  # type: Tuple[int, str, float]
+a: list[int] = [1, 2, 3]
+b: tuple[int, ...] = (1, 2, 3)
+c: tuple[int, str, float] = (1, "2", 3.5)
 ```
 
 <a id="s3.19.10-typevars"></a>
@@ -3236,10 +3259,10 @@ function `TypeVar` is a common way to use them.
 Example:
 
 ```python
-from typing import List, TypeVar
-T = TypeVar("T")
+from typing import TypeVar
+_T = TypeVar("_T")
 ...
-def next(l: List[T]) -> T:
+def next(l: list[_T]) -> _T:
   return l.pop()
 ```
 
@@ -3252,8 +3275,7 @@ def add(a: AddableType, b: AddableType) -> AddableType:
 ```
 
 A common predefined type variable in the `typing` module is `AnyStr`. Use it for
-multiple annotations that can be `bytes` or `unicode` and must all be the same
-type.
+multiple annotations that can be `bytes` or `str` and must all be the same type.
 
 ```python
 from typing import AnyStr
@@ -3263,6 +3285,26 @@ def check_length(x: AnyStr) -> AnyStr:
   raise ValueError()
 ```
 
+A TypeVar must have a descriptive name, unless it meets all of the following
+criteria:
+
+*   not externally visible
+*   not constrained
+
+```python
+Yes:
+  _T = TypeVar("_T")
+  AddableType = TypeVar("AddableType", int, float, str)
+  AnyFunction = TypeVar("AnyFunction", bound=Callable)
+```
+
+```python
+No:
+  T = TypeVar("T")
+  _T = TypeVar("_T", int, float, str)
+  _F = TypeVar("_F", bound=Callable)
+```
+
 <a id="s3.19.11-string-types"></a>
 <a id="s3.19.11-strings"></a>
 <a id="31911-string-types"></a>
@@ -3270,45 +3312,15 @@ def check_length(x: AnyStr) -> AnyStr:
 <a id="typing-strings"></a>
 #### 3.19.11 String types 
 
-The proper type for annotating strings depends on what versions of Python the
-code is intended for.
+> Do not use `typing.Text` in new code. It's only for Python 2/3 compatibility.
 
-Prefer to use `str`, though `Text` is also acceptable. Be consistent in using
-one or the other. For code that deals with binary data, use `bytes`. For Python
-2 compatible code that processes text data (`str` or `unicode` in Python 2,
-`str` in Python 3), use `Text`.
+Use `str` for string/text data. For code that deals with binary data, use
+`bytes`.
 
 ```python
-def deals_with_text_data_in_py3(x: str) -> str:
+def deals_with_text_data(x: str) -> str:
   ...
 def deals_with_binary_data(x: bytes) -> bytes:
-  ...
-def py2_compatible_text_data_processor(x: Text) -> Text:
-  ...
-```
-
-In some uncommon Python 2 compatibility cases, `str` may make sense instead of
-`Text`, typically to aid compatibility when the return types aren't the same
-between Python 2 and Python 3. Never use `unicode` as it doesn't exist in Python
-3. The reason this discrepancy exists is because `str` means something different
-in Python 2 than in Python 3.
-
-No:
-
-```python
-def py2_code(x: str) -> unicode:
-  ...
-```
-
-If the type can be either bytes or text, use `Union`, with the appropriate text
-type.
-
-```python
-from typing import Text, Union
-...
-def py3_only(x: Union[bytes, str]) -> Union[bytes, str]:
-  ...
-def py2_compatible(x: Union[bytes, Text]) -> Union[bytes, Text]:
   ...
 ```
 
@@ -3323,19 +3335,21 @@ return type is the same as the argument type in the code above, use
 <a id="typing-imports"></a>
 #### 3.19.12 Imports For Typing 
 
-For classes from the `typing` module, always import the class itself. You are
-explicitly allowed to import multiple specific classes on one line from the
-`typing` module. Ex:
+For symbols from the `typing` and `collections.abc` modules used to support
+static analysis and type checking, always import the symbol itself. This keeps
+common annotations more concise and matches typing practices used around the
+world. You are explicitly allowed to import multiple specific classes on one
+line from the `typing` and `collections.abc` modules. Ex:
 
 ```python
-from typing import Any, Dict, Optional
+from collections.abc import Mapping, Sequence
+from typing import Any, Union
 ```
 
-Given that this way of importing from `typing` adds items to the local
-namespace, any names in `typing` should be treated similarly to keywords, and
-not be defined in your Python code, typed or not. If there is a collision
-between a type and an existing name in a module, import it using `import x as
-y`.
+Given that this way of importing adds items to the local namespace, names in
+`typing` or `collections.abc` should be treated similarly to keywords, and not
+be defined in your Python code, typed or not. If there is a collision between a
+type and an existing name in a module, import it using `import x as y`.
 
 ```python
 from typing import Any as AnyType
@@ -3409,12 +3423,12 @@ When annotating, prefer to specify type parameters for generic types; otherwise,
 [the generics' parameters will be assumed to be `Any`](https://www.python.org/dev/peps/pep-0484/#the-any-type).
 
 ```python
-def get_names(employee_ids: List[int]) -> Dict[int, Any]:
+def get_names(employee_ids: list[int]) -> dict[int, Any]:
   ...
 ```
 
 ```python
-# These are both interpreted as get_names(employee_ids: List[Any]) -> Dict[Any, Any]
+# These are both interpreted as get_names(employee_ids: list[Any]) -> dict[Any, Any]
 def get_names(employee_ids: list) -> Dict:
   ...
 
@@ -3427,13 +3441,13 @@ remember that in many cases [`TypeVar`](#typing-type-var) might be more
 appropriate:
 
 ```python
-def get_names(employee_ids: List[Any]) -> Dict[Any, str]:
+def get_names(employee_ids: list[Any]) -> dict[Any, str]:
   """Returns a mapping from employee ID to employee name for given IDs."""
 ```
 
 ```python
-T = TypeVar('T')
-def get_names(employee_ids: List[T]) -> Dict[T, str]:
+_T = TypeVar('_T')
+def get_names(employee_ids: list[_T]) -> dict[_T, str]:
   """Returns a mapping from employee ID to employee name for given IDs."""
 ```
 
